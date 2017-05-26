@@ -38,7 +38,10 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.Run;
 import hudson.model.TaskListener;
+import hudson.remoting.VirtualChannel;
 import hudson.util.DirScanner.Glob;
+
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -48,15 +51,11 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.EnumSet;
-import java.util.GregorianCalendar;
-import java.util.List;
-import java.util.StringTokenizer;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import jenkins.MasterToSlaveFileCallable;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang.time.DurationFormatUtils;
 import org.springframework.util.AntPathMatcher;
@@ -279,72 +278,79 @@ public class WAStorageClient {
 
 	    StringTokenizer strTokens = new StringTokenizer(expFP, fpSeparator);
 	    while (strTokens.hasMoreElements()) {
-		String fileName = strTokens.nextToken();
+			String fileName = strTokens.nextToken();
 
-		String embeddedVP = null;
+			String embeddedVP = null;
 
-		if (fileName != null && fileName.contains("::")) {
-		    int embVPSepIndex = fileName.indexOf("::");
+			if (fileName != null && fileName.contains("::")) {
+				int embVPSepIndex = fileName.indexOf("::");
 
-		    // Separate fileName and Virtual directory name
-		    if (fileName.length() > embVPSepIndex + 1) {
-			embeddedVP = fileName.substring(embVPSepIndex + 2,
-				fileName.length());
+				// Separate fileName and Virtual directory name
+				if (fileName.length() > embVPSepIndex + 1) {
+				embeddedVP = fileName.substring(embVPSepIndex + 2,
+					fileName.length());
 
-			if (Utils.isNullOrEmpty(embeddedVP)) {
-			    embeddedVP = null;
-			} else if (!embeddedVP.endsWith(Constants.FWD_SLASH)) {
-			    embeddedVP = embeddedVP + Constants.FWD_SLASH;
-			}
-		    }
-		    fileName = fileName.substring(0, embVPSepIndex);
-		}
-
-		archiveIncludes += "," + fileName;
-
-		// List all the paths without the zip archives.
-		FilePath[] paths = workspacePath.list(fileName, excludesWithoutZip);
-		filesUploaded += paths.length;
-
-		URI workspaceURI = workspacePath.toURI();
-
-		if (uploadType == UploadType.INVALID) {
-		    // no files are uploaded
-		    return 0;
-		}
-
-		if (paths.length != 0 && uploadType != UploadType.ZIP) {
-		    for (FilePath src : paths) {
-			// Remove the workspace bit of this path
-			URI srcURI = workspaceURI.relativize(src.toURI());
-
-			CloudBlockBlob blob;
-			String srcPrefix = srcURI.getPath();
-			if (Utils.isNullOrEmpty(expVP)
-				&& Utils.isNullOrEmpty(embeddedVP)) {
-			    blob = container.getBlockBlobReference(srcPrefix);
-			} else {
-			    String prefix = expVP;
-
-			    if (!Utils.isNullOrEmpty(embeddedVP)) {
-				if (Utils.isNullOrEmpty(expVP)) {
-				    prefix = embeddedVP;
-				} else {
-				    prefix = expVP + embeddedVP;
+				if (Utils.isNullOrEmpty(embeddedVP)) {
+					embeddedVP = null;
+				} else if (!embeddedVP.endsWith(Constants.FWD_SLASH)) {
+					embeddedVP = embeddedVP + Constants.FWD_SLASH;
 				}
-			    }
-			    blob = container.getBlockBlobReference(prefix + srcPrefix);
+				}
+				fileName = fileName.substring(0, embVPSepIndex);
 			}
 
-			// Set blob properties
-			if (blobProperties != null) {
-				blobProperties.configure(blob);
+			archiveIncludes += "," + fileName;
+
+			// List all the paths without the zip archives.
+			FilePath[] paths = workspacePath.list(fileName, excludesWithoutZip);
+
+			//Filter files and only get newer files
+			final long buildTime = run.getTimestamp().getTimeInMillis();
+            final long timeOnMaster = System.currentTimeMillis();
+
+			paths = filterResults(paths, buildTime);
+			paths = workspacePath.act(new FilterResultCallable(paths, buildTime, timeOnMaster));
+			filesUploaded += paths.length;
+
+			URI workspaceURI = workspacePath.toURI();
+
+			if (uploadType == UploadType.INVALID) {
+				// no files are uploaded
+				return 0;
 			}
 
-			String uploadedFileHash = upload(listener, blob, src);
-			individualBlobs.add(new AzureBlob(blob.getName(), blob.getUri().toString().replace("http://", "https://"), uploadedFileHash, src.length()));
-		    }
-		}
+			if (paths.length != 0 && uploadType != UploadType.ZIP) {
+				for (FilePath src : paths) {
+					// Remove the workspace bit of this path
+					URI srcURI = workspaceURI.relativize(src.toURI());
+
+					CloudBlockBlob blob;
+					String srcPrefix = srcURI.getPath();
+					if (Utils.isNullOrEmpty(expVP)
+						&& Utils.isNullOrEmpty(embeddedVP)) {
+						blob = container.getBlockBlobReference(srcPrefix);
+					} else {
+						String prefix = expVP;
+
+						if (!Utils.isNullOrEmpty(embeddedVP)) {
+						if (Utils.isNullOrEmpty(expVP)) {
+							prefix = embeddedVP;
+						} else {
+							prefix = expVP + embeddedVP;
+						}
+						}
+						blob = container.getBlockBlobReference(prefix + srcPrefix);
+					}
+
+					// Set blob properties
+					if (blobProperties != null) {
+						blobProperties.configure(blob);
+					}
+
+					String uploadedFileHash = upload(listener, blob, src);
+					individualBlobs.add(new AzureBlob(blob.getName(), blob.getUri().toString().replace("http://", "https://"), uploadedFileHash, src.length()));
+				}
+			}
 	    }
 
 	    if (filesUploaded != 0 && (uploadType != UploadType.INDIVIDUAL)) {
@@ -379,6 +385,24 @@ public class WAStorageClient {
 	}
 		return filesUploaded;
     }
+
+    public static FilePath[] filterResults(FilePath[] filePaths, final long buildTime) throws IOException {
+    	try {
+			ArrayList<FilePath> filterPaths = new ArrayList<>();
+			for (FilePath fp : filePaths) {
+				File file = new File(fp.toURI().getPath());
+				long time = file.lastModified();
+				if (time > buildTime) {
+					filterPaths.add(fp);
+				}
+			}
+			return filterPaths.toArray(new FilePath[filterPaths.size()]);
+		} catch (Exception e) {
+    		throw new IOException(e.getMessage());
+		}
+	}
+
+
 
     /**
      * Deletes contents of container
@@ -808,4 +832,29 @@ public class WAStorageClient {
 	return DurationFormatUtils.formatDuration(timeInMills, "HH:mm:ss.S")
 		+ " (HH:mm:ss.S)";
     }
+}
+
+class FilterResultCallable extends MasterToSlaveFileCallable<FilePath[]> {
+    FilePath[] filePaths;
+    final long buildTime;
+    final long timeOnMaster;
+
+    public FilterResultCallable (FilePath[] filePaths, final long buildTime, final long timeOnMaster) {
+        this.filePaths = filePaths;
+        this.buildTime = buildTime;
+        this.timeOnMaster = timeOnMaster;
+    }
+
+    @Override
+    public FilePath[] invoke(File file, VirtualChannel channel) throws IOException {
+        final long timeOnSlave = System.currentTimeMillis();
+        try {
+            //Time on slave may be not as same as master
+            return WAStorageClient.filterResults(filePaths, buildTime + (timeOnSlave - timeOnMaster));
+        } catch (Exception e) {
+            throw new IOException(e.getMessage());
+        }
+    }
+
+
 }

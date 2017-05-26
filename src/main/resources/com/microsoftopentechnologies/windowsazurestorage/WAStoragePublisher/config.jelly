@@ -78,6 +78,12 @@
 					<f:checkbox title="${%doNotWaitForPreviousBuild_title}"/>
 				</div>
 			</f:entry>
+
+			<f:entry field="checkOnlyFilesAreNewer" help="/plugin/windows-azure-storage/help-doNotWaitForPreviousBuild.html">
+				<div align="left">
+					<f:checkbox title="${%checkOnlyFilesAreNewer}"/>
+				</div>
+			</f:entry>
 		</f:advanced>
 	</f:section>
 
