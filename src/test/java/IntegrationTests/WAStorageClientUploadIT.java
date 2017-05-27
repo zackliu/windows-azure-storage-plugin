@@ -125,7 +125,7 @@ public class WAStorageClientUploadIT extends IntegrationTest {
 
             File workspaceDir = new File(containerName);
             FilePath workspace = new FilePath(mockLauncher.getChannel(), workspaceDir.getAbsolutePath());
-            mockStorageClient.upload(mockRun, mockLauncher, TaskListener.NULL, testEnv.sampleStorageAccount, testEnv.containerName, blobProperties,false, false, "*.txt", "", "", WAStoragePublisher.UploadType.INDIVIDUAL, individualBlobs, archiveBlobs, workspace);
+            mockStorageClient.upload(mockRun, mockLauncher, TaskListener.NULL, testEnv.sampleStorageAccount, testEnv.containerName, blobProperties,false, false, "*.txt", "", "", WAStoragePublisher.UploadType.INDIVIDUAL, individualBlobs, archiveBlobs, workspace, true);
 
             for (ListBlobItem blobItem : testEnv.container.listBlobs()) {
                 if (blobItem instanceof CloudBlockBlob) {
@@ -170,7 +170,7 @@ public class WAStorageClientUploadIT extends IntegrationTest {
             FilePath workspace = new FilePath(mockLauncher.getChannel(), workspaceDir.getAbsolutePath());
             mockStorageClient.upload(mockRun, mockLauncher, TaskListener.NULL, testEnv.sampleStorageAccount, testEnv.containerName, blobProperties,false, false,
                 firstFile.getName(), // Upload the first file only for efficiency
-                "", "", WAStoragePublisher.UploadType.INDIVIDUAL, individualBlobs, archiveBlobs, workspace);
+                "", "", WAStoragePublisher.UploadType.INDIVIDUAL, individualBlobs, archiveBlobs, workspace, true);
 
             CloudBlockBlob downloadedBlob = testEnv.container.getBlockBlobReference(firstFile.getName());
             downloadedBlob.downloadAttributes();

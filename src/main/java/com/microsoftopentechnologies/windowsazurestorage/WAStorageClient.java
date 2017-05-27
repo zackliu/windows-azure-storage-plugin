@@ -248,7 +248,7 @@ public class WAStorageClient {
 	    AzureBlobProperties blobProperties,
 	    boolean cntPubAccess, boolean cleanUpContainer, String expFP,
 	    String expVP, String excludeFP, UploadType uploadType,
-	    List<AzureBlob> individualBlobs, List<AzureBlob> archiveBlobs, FilePath workspace) throws WAStorageException {
+	    List<AzureBlob> individualBlobs, List<AzureBlob> archiveBlobs, FilePath workspace, boolean checkOnlyFilesAreNewer) throws WAStorageException {
 
 	int filesUploaded = 0; // Counter to track no. of files that are uploaded
 
@@ -305,11 +305,12 @@ public class WAStorageClient {
 			FilePath[] paths = workspacePath.list(fileName, excludesWithoutZip);
 
 			//Filter files and only get newer files
-			final long buildTime = run.getTimestamp().getTimeInMillis();
-            final long timeOnMaster = System.currentTimeMillis();
+            if ( checkOnlyFilesAreNewer ) {
+                final long buildTime = run.getTimestamp().getTimeInMillis();
+                final long timeOnMaster = System.currentTimeMillis();
 
-			paths = filterResults(paths, buildTime);
-			paths = workspacePath.act(new FilterResultCallable(paths, buildTime, timeOnMaster));
+                paths = workspacePath.act(new FilterResultCallable(paths, buildTime, timeOnMaster));
+            }
 			filesUploaded += paths.length;
 
 			URI workspaceURI = workspacePath.toURI();
@@ -392,7 +393,7 @@ public class WAStorageClient {
 			for (FilePath fp : filePaths) {
 				File file = new File(fp.toURI().getPath());
 				long time = file.lastModified();
-				if (time > buildTime) {
+ 				if (time >= buildTime) {
 					filterPaths.add(fp);
 				}
 			}
@@ -402,7 +403,29 @@ public class WAStorageClient {
 		}
 	}
 
+	static class FilterResultCallable extends MasterToSlaveFileCallable<FilePath[]> {
+		FilePath[] filePaths;
+		final long buildTime;
+		final long timeOnMaster;
+		final private long TIMEERROR = 5000;
 
+		public FilterResultCallable (FilePath[] filePaths, final long buildTime, final long timeOnMaster) {
+			this.filePaths = filePaths;
+			this.buildTime = buildTime;
+			this.timeOnMaster = timeOnMaster;
+		}
+
+		@Override
+		public FilePath[] invoke(File file, VirtualChannel channel) throws IOException {
+			final long timeOnSlave = System.currentTimeMillis();
+			try {
+				//Time on slave may be not as same as on master
+				return WAStorageClient.filterResults(filePaths, buildTime + (timeOnSlave - timeOnMaster) - TIMEERROR);
+			} catch (Exception e) {
+				throw new IOException(e.getMessage());
+			}
+		}
+	}
 
     /**
      * Deletes contents of container
@@ -834,27 +857,3 @@ public class WAStorageClient {
     }
 }
 
-class FilterResultCallable extends MasterToSlaveFileCallable<FilePath[]> {
-    FilePath[] filePaths;
-    final long buildTime;
-    final long timeOnMaster;
-
-    public FilterResultCallable (FilePath[] filePaths, final long buildTime, final long timeOnMaster) {
-        this.filePaths = filePaths;
-        this.buildTime = buildTime;
-        this.timeOnMaster = timeOnMaster;
-    }
-
-    @Override
-    public FilePath[] invoke(File file, VirtualChannel channel) throws IOException {
-        final long timeOnSlave = System.currentTimeMillis();
-        try {
-            //Time on slave may be not as same as master
-            return WAStorageClient.filterResults(filePaths, buildTime + (timeOnSlave - timeOnMaster));
-        } catch (Exception e) {
-            throw new IOException(e.getMessage());
-        }
-    }
-
-
-}

@@ -79,7 +79,7 @@
 				</div>
 			</f:entry>
 
-			<f:entry field="checkOnlyFilesAreNewer" help="/plugin/windows-azure-storage/help-doNotWaitForPreviousBuild.html">
+			<f:entry field="checkOnlyFilesAreNewer" help="/plugin/windows-azure-storage/help-checkOnlyFilesAreNewer.html">
 				<div align="left">
 					<f:checkbox title="${%checkOnlyFilesAreNewer}"/>
 				</div>

@@ -132,6 +132,8 @@ public class WAStoragePublisher extends Recorder implements SimpleBuildStep {
 
     private final boolean doNotWaitForPreviousBuild;
 
+    private final boolean checkOnlyFilesAreNewer;
+
     private String storageCredentialId;
 
     private transient AzureCredentials.StorageAccountCredential storageCreds;
@@ -154,7 +156,8 @@ public class WAStoragePublisher extends Recorder implements SimpleBuildStep {
             final boolean doNotFailIfArchivingReturnsNothing,
             final boolean doNotUploadIndividualFiles,
             final boolean uploadZips,
-            final boolean doNotWaitForPreviousBuild) {
+            final boolean doNotWaitForPreviousBuild,
+            final boolean checkOnlyFilesAreNewer) {
         super();
         this.filesPath = filesPath.trim();
         this.excludeFilesPath = excludeFilesPath.trim();
@@ -170,6 +173,7 @@ public class WAStoragePublisher extends Recorder implements SimpleBuildStep {
         this.uploadZips = uploadZips;
         this.doNotWaitForPreviousBuild = doNotWaitForPreviousBuild;
         this.storageCredentialId = storageCredentialId;
+        this.checkOnlyFilesAreNewer = checkOnlyFilesAreNewer;
         this.storageCreds = AzureCredentials.getStorageCreds(this.storageCredentialId, storageAccName);
         this.storageAccName = this.storageCreds.getStorageAccountName();
     }
@@ -221,6 +225,8 @@ public class WAStoragePublisher extends Recorder implements SimpleBuildStep {
     public boolean isDoNotWaitForPreviousBuild() {
         return doNotWaitForPreviousBuild;
     }
+
+    public boolean isCheckOnlyFilesAreNewer() { return checkOnlyFilesAreNewer; }
 
     public String getStorageCredentialId() {
         if(this.storageCredentialId == null && this.storageAccName != null)
@@ -326,7 +332,7 @@ public class WAStoragePublisher extends Recorder implements SimpleBuildStep {
 
             int filesUploaded = WAStorageClient.upload(run, launcher, listener, strAcc,
                     expContainerName, blobProperties, cntPubAccess, cleanUpContainer, expFP,
-                    expVP, excludeFP, getArtifactUploadType(), individualBlobs, archiveBlobs, ws);
+                    expVP, excludeFP, getArtifactUploadType(), individualBlobs, archiveBlobs, ws, checkOnlyFilesAreNewer);
 
             // Mark build unstable if no files are uploaded and the user
             // doesn't want the build not to fail in that case.
