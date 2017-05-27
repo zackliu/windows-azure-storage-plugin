@@ -287,14 +287,14 @@ public class WAStorageClient {
 
 				// Separate fileName and Virtual directory name
 				if (fileName.length() > embVPSepIndex + 1) {
-				embeddedVP = fileName.substring(embVPSepIndex + 2,
-					fileName.length());
+                    embeddedVP = fileName.substring(embVPSepIndex + 2,
+                        fileName.length());
 
-				if (Utils.isNullOrEmpty(embeddedVP)) {
-					embeddedVP = null;
-				} else if (!embeddedVP.endsWith(Constants.FWD_SLASH)) {
-					embeddedVP = embeddedVP + Constants.FWD_SLASH;
-				}
+                    if (Utils.isNullOrEmpty(embeddedVP)) {
+                        embeddedVP = null;
+                    } else if (!embeddedVP.endsWith(Constants.FWD_SLASH)) {
+                        embeddedVP = embeddedVP + Constants.FWD_SLASH;
+                    }
 				}
 				fileName = fileName.substring(0, embVPSepIndex);
 			}
